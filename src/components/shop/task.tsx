@@ -236,8 +236,8 @@ const TaskCard: React.FC<TaskCardProps> = (task) => {
     const deployWalrus = async (encryptedBytes: Uint8Array | ArrayBuffer, address: string) => {
         try {
             // Use the proxy path defined in vite.config.ts to avoid CORS issues
-            // const walPublisher = import.meta.env.VITE_WALRUS_PUBLISHER;
-            const walPublisher = '/api/walrus';
+            const walPublisher = import.meta.env.VITE_WALRUS_PUBLISHER;
+            // const walPublisher = '/api/wal/rus';
             const formData = new FormData();
             // Ensure we provide a plain ArrayBuffer to Blob; copy if the input is a Uint8Array (avoids SharedArrayBuffer issues)
             const arrayBuffer = encryptedBytes instanceof Uint8Array ? new Uint8Array(encryptedBytes).buffer : encryptedBytes;
