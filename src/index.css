@@ -1,0 +1,121 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@100..900&display=swap");
+@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* #root {
+  width: 100vw;
+  height: 100vh;
+  background: radial-gradient(#5a47ce, #232323 80%);
+} */
+
+
+body {
+  margin: 0;
+}
+
+.outline-text {
+  -webkit-text-stroke: 1px white;
+}
+
+/* ================================================================
+   Custom Utilities – Viết thủ công để tránh bị Tailwind purge
+   ================================================================ */
+@layer utilities {
+  /* ==================== Font Family: Poppins ==================== */
+  .font-sans {
+    font-family: "Poppins", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  }
+
+  /* ==================== Font Sizes lớn ==================== */
+  .text-10xl {
+    font-size: 10rem;
+    line-height: 1;
+  }
+
+  .text-11xl {
+    font-size: 11rem;
+    line-height: 1;
+  }
+
+  .text-12xl {
+    font-size: 12rem;
+    line-height: 1;
+  }
+
+  .text-13xl {
+    font-size: 13rem;
+    line-height: 1;
+  }
+
+  /* ==================== Horizontal Scroll Animations ==================== */
+  @keyframes horizontal-scroll {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-100%);
+    }
+  }
+
+  @keyframes horizontal-scroll-2 {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  .animate-horizontal-scroll {
+    animation: horizontal-scroll 16s linear infinite;
+  }
+
+  .animate-horizontal-scroll-2 {
+    animation: horizontal-scroll-2 16s linear infinite;
+  }
+
+  /* ==================== Outline / Stroke Text ==================== */
+  .outline-text {
+    -webkit-text-stroke: 4px white;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .outline-text-thin {
+    -webkit-text-stroke: 2px white;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .outline-text-thick {
+    -webkit-text-stroke: 6px white;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+/* Trong file globals.css hoặc tailwind.config.js với animation */
+@keyframes horizontal-scroll {
+  from {
+    transform: translateX(0%);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes horizontal-scroll-2 {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0%);
+  }
+}
+
+.animate-horizontal-scroll {
+  animation: horizontal-scroll 40s linear infinite;
+}
+
+.animate-horizontal-scroll-2 {
+  animation: horizontal-scroll-2 40s linear infinite;
+}

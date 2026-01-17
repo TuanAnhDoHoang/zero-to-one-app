@@ -1,0 +1,61 @@
+/* Base styles */
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+/* body {
+    font-family: 'Press Start 2P', cursive;
+    background: #0f0c29;
+    background: linear-gradient(to right, #0f0c29, #302b63, #24243e);
+    color: white;
+} */
+
+.font-gamer {
+    font-family: 'Press Start 2P', cursive;
+}
+
+.text-stroke {
+    text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+}
+
+.text-stroke-black {
+    text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+}
+/* Animation for idea cards */
+idea-card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+idea-card:hover {
+    transform: translateY(-5px);
+}
+
+/* Coming soon cards */
+.coming-soon-card {
+    transition: all 0.3s ease;
+}
+
+.coming-soon-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 15px rgba(0, 0, 0, 0.05);
+}
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Wallet modal animation */
+#walletModal {
+    animation: fadeIn 0.3s ease;
+}
