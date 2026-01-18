@@ -74,7 +74,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       try {
-        const response = await fetch('/api/projects', {
+        const response = await fetch(`${endpoint}/projects`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -113,7 +113,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     async (id: string, updates: Partial<Project>) => {
       if (!token) return;
       try {
-        const response = await fetch(`/api/projects/${id}`, {
+        const response = await fetch(`${endpoint}/projects/${id}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -137,7 +137,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     async (id: string) => {
       if (!token) return;
       try {
-        const response = await fetch(`/api/projects/${id}`, {
+        const response = await fetch(`${endpoint}/projects/${id}`, {
           method: 'DELETE',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -152,7 +152,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     },
     [token]
   );
-  
+
   const uploadPrototype = React.useCallback(async (uploadData: { project: Project; address: string }) => {
     if (!token) return;
     if (!uploadData.project) {
@@ -160,7 +160,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     try {
-      const response = await fetch(`/api/projects/upload-prototype`, {
+      const response = await fetch(`${endpoint}/projects/upload-prototype`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

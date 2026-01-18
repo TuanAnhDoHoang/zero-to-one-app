@@ -1,5 +1,5 @@
 // React core hooks – Most fundamental, always first
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useState, useTransition, useRef } from 'react';
 
 // UI Components from your own project (custom or shadcn/ui) – High priority, used frequently
 import { Button } from '../components/ui/button';
@@ -121,49 +121,71 @@ const Editor = ({ p }: projectEditorProps) => {
     }
 
     const handleOpenInExplorer = () => {
-        const explorerUrl = `https://suiscan.xyz/testnet/object/${uploadSuccess.objectId}`;
+        // http://testnet.suivision.xyz/object/0x6c87d91a0afd7a00883d360cafe7fd27efaffeb7880506a2dc43fcc24fcc0dd8
+        const explorerUrl = `https://testnet.suivision.xyz/object/${uploadSuccess.objectId}`;
         window.open(explorerUrl, '_blank');
     }
-    const handleOpenGithubTool  = () => {
+    const handleOpenGithubTool = () => {
         const githubUrl = `https://github.com/TuanAnhDoHoang/run-site`;
         window.open(githubUrl, '_blank');
     }
+
+    // Prototype Upload Handler
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const handlePrototypeUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (file) {
+            if (file.type !== 'text/html' && !file.name.endsWith('.html')) {
+                toast({ title: 'Invalid file type', description: 'Please upload an HTML file.', variant: 'destructive' });
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const content = e.target?.result as string;
+                if (content) {
+                    updateProjectState({ prototypeCode: content });
+                    toast({ title: 'Prototype Updated', description: 'Code uploaded successfully.' });
+                }
+            };
+            reader.readAsText(file);
+        }
+    };
     //END======================State=========================//
 
 
     //======================AI=========================//
-    const handleGenerateCode = async () => {
-        if (!project.ideaDescription) {
-            toast({
-                title: 'Error', description: 'Please provide an idea description first.', variant: 'destructive'
-            });
-            return;
-        }
-        setIsCodeLoading(true);
-        try {
-            const result = await fetch('/api/generate-code', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    ideaDescription: project.ideaDescription,
-                    programmingLanguage: 'javascript'
-                }),
-            }).then(res => res.json())
-            updateProjectState({ prototypeCode: result.code });
-            toast({
-                title: 'Code Generated', description: 'A prototype has been generated based on your idea.'
-            });
-        } catch (error) {
-            console.error(error);
-            toast({
-                title: 'Error', description: 'Failed to generate code.', variant: 'destructive'
-            });
-        } finally {
-            setIsCodeLoading(false);
-        }
-    }
+    // const handleGenerateCode = async () => {
+    //     if (!project.ideaDescription) {
+    //         toast({
+    //             title: 'Error', description: 'Please provide an idea description first.', variant: 'destructive'
+    //         });
+    //         return;
+    //     }
+    //     setIsCodeLoading(true);
+    //     try {
+    //         const result = await fetch('/api/generate-code', {
+    //             method: 'POST',
+    //             headers: {
+    //                 'Content-Type': 'application/json',
+    //             },
+    //             body: JSON.stringify({
+    //                 ideaDescription: project.ideaDescription,
+    //                 programmingLanguage: 'javascript'
+    //             }),
+    //         }).then(res => res.json())
+    //         updateProjectState({ prototypeCode: result.code });
+    //         toast({
+    //             title: 'Code Generated', description: 'A prototype has been generated based on your idea.'
+    //         });
+    //     } catch (error) {
+    //         console.error(error);
+    //         toast({
+    //             title: 'Error', description: 'Failed to generate code.', variant: 'destructive'
+    //         });
+    //     } finally {
+    //         setIsCodeLoading(false);
+    //     }
+    // }
 
 
     const handleGenerateQuestions = async () => {
@@ -223,8 +245,8 @@ const Editor = ({ p }: projectEditorProps) => {
                     toast({ title: 'Idea Updated!', description: 'Your changes have been saved.' });
                 } else {
                     // Create new project
-                    const newProject = await createProject({ 
-                        name: project.name, 
+                    const newProject = await createProject({
+                        name: project.name,
                         ideaDescription: project.ideaDescription,
                         guidedQuestions: project.guidedQuestions || [],
                         prototypeCode: project.prototypeCode || "",
@@ -326,7 +348,7 @@ const Editor = ({ p }: projectEditorProps) => {
                                 <ResizablePanel defaultSize={8} minSize={8}>
                                     <div className="flex flex-col h-full bg-card rounded-lg border">
                                         <div className='p-4 border-b flex items-center justify-between'>
-                                            <h3 className="text-lg font-semibold flex items-center"><Code className="mr-2" /> Generated Prototype Code</h3>
+                                            <h3 className="text-lg font-semibold flex items-center"><Code className="mr-2" /> Source </h3>
                                             <div className='flex items-center gap-2 items-center justify-center'>
                                                 {copied ?
                                                     <Button>
@@ -382,7 +404,9 @@ const Editor = ({ p }: projectEditorProps) => {
                                             {isQuestionsLoading ? 'Thinking...' : 'Guided Idea Maturation'}
                                         </Button>
                                         <div className="space-y-2">
-                                            <Button onClick={handleGenerateCode} disabled={isCodeLoading} className="w-full justify-start hover:cursor-pointer ">
+                                            <Button
+                                                // onClick={handleGenerateCode} 
+                                                disabled={isCodeLoading} className="w-full justify-start hover:cursor-pointer ">
                                                 <Code className="mr-2" />
                                                 {isCodeLoading ? 'Generating...' : 'Generate Prototype'}
                                             </Button>
@@ -392,6 +416,17 @@ const Editor = ({ p }: projectEditorProps) => {
                                                     Preview Prototype
                                                 </Button>
                                             )}
+                                            <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full justify-start hover:cursor-pointer">
+                                                <Upload className="mr-2" />
+                                                Upload HTML Code
+                                            </Button>
+                                            <input
+                                                type="file"
+                                                ref={fileInputRef}
+                                                accept=".html"
+                                                className="hidden"
+                                                onChange={handlePrototypeUpload}
+                                            />
                                         </div>
                                         <div className="space-y-2 hover:cursor-pointer">
                                             <Label htmlFor="project-files-upload" className='cursor-pointer'>
