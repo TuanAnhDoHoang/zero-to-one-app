@@ -1,6 +1,10 @@
 import * as React from 'react';
 import { useAuth } from './auth-context';
 import type { Project } from '@/models/project';
+import { useCurrentAccount, useSignPersonalMessage, useSuiClient } from '@mysten/dapp-kit';
+import { SealClient, SessionKey } from '@mysten/seal';
+import { fromHex, toHex } from '@mysten/sui/utils';
+import { randomBytes } from 'crypto';
 
 interface ProjectContextType {
   projects: Project[];
@@ -23,6 +27,21 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [projects, setProjects] = React.useState<Project[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const endpoint = import.meta.env.VITE_ENDPOINT;
+  const { mutate: signPersonalMessage } = useSignPersonalMessage();
+  const suiClient = useSuiClient();
+
+  //seal
+  const serverObjectIds = ["0x73d05d62c18d9374e3ea529e8e0ed6161da1a141a94d3f76ae3fe4e99356db75", "0xf5d14a81a982144ae441cd7d64b09027f116a468bd36e7eca494f750591623c8"];
+  const client = new SealClient({
+    suiClient,
+    serverConfigs: serverObjectIds.map((id) => ({
+      objectId: id,
+      weight: 1,
+    })),
+    verifyKeyServers: false,
+  });
+
+  const currAccount = useCurrentAccount();
 
   const loadProjects = React.useCallback(async () => {
     if (!isAuthenticated || !token) {
@@ -73,7 +92,44 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         console.error('No token available for creating project.');
         return;
       }
+      let quiltIdStr = "";
+      let sealIdHex = "";
+
       try {
+        if (projectData.projectFiles && projectData.projectFiles.length > 0) {
+          const protectedData = {
+            projectFiles: projectData.projectFiles,
+            prototypeCode: projectData.prototypeCode
+          };
+          const jsonString = JSON.stringify(protectedData);
+          const blob = new Blob([jsonString], { type: 'application/json' });
+          const fileToEncrypt = new File([blob], "project_data.json", { type: 'application/json' });
+
+          const sealId = randomBytes(32);
+          sealIdHex = toHex(sealId);
+
+          const { encryptedBytes } = await encryptFile(fileToEncrypt, sealId);
+
+          if (currAccount?.address) {
+            const uploadResponse = await fetch(`${endpoint}/projects/upload-file`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ encryptedBytes, address: currAccount.address }),
+            });
+
+            if (uploadResponse.ok) {
+              const uploadData = await uploadResponse.json();
+              if (uploadData.success && uploadData.response) {
+                quiltIdStr = uploadData.response;
+              }
+            } else {
+              console.error('Failed to upload encrypted data to Walrus');
+            }
+          }
+        }
+
         const response = await fetch(`${endpoint}/projects`, {
           method: 'POST',
           headers: {
@@ -84,8 +140,10 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
             name: projectData.name,
             ideaDescription: projectData.ideaDescription,
             guidedQuestions: projectData.guidedQuestions || [],
-            prototypeCode: projectData.prototypeCode || "",
-            projectFiles: projectData.projectFiles || []
+            prototypeCode: "",
+            projectFiles: [],
+            quiltId: quiltIdStr,
+            sealId: sealIdHex
           }),
         });
         if (response.ok) {
@@ -95,6 +153,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
               id: data.project.id,
               name: data.project.name,
               ideaDescription: data.project.ideaDescription || '',
+              quiltId: data.project.quiltId,
+              sealId: data.project.sealId
             };
             setProjects((prev) => [newProject, ...prev]);
             return newProject;
@@ -106,7 +166,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         console.error('Error creating project:', error);
       }
     },
-    [token]
+    [token, endpoint, client, currAccount]
   );
 
   const updateProject = React.useCallback(
@@ -184,7 +244,44 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const refreshProjects = React.useCallback(async () => {
     await loadProjects();
   }, [loadProjects]);
+  const getSessionKey = async () => {
+    if (!currAccount) {
+      console.error('No current account found');
+      return;
+    }
+    const pid = import.meta.env.VITE_PID;
+    const sessionKey = await SessionKey.create({
+      address: currAccount.address,
+      packageId: pid,
+      ttlMin: 30, // TTL of 30 minutes
+      suiClient: suiClient,
+    });
+    const message = sessionKey.getPersonalMessage();
 
+    await new Promise<void>((resolve, reject) => {
+      signPersonalMessage({ message: message }, {
+        onSuccess: async (result) => {
+          await sessionKey.setPersonalMessageSignature(result.signature);
+          resolve();
+        },
+        onError: (error) => {
+          console.error('Failed to sign personal message:', error);
+          reject(error);
+        },
+      });
+    });
+    return sessionKey;
+  }
+  const encryptFile = async (file: File, sealId: Uint8Array) => {
+    const fileBytes = new Uint8Array(await file.arrayBuffer());
+    const { encryptedObject: encryptedBytes, key: backupKey } = await client.encrypt({
+      threshold: 1,
+      packageId: toHex(fromHex(import.meta.env.VITE_PID)),
+      id: toHex(sealId),
+      data: fileBytes
+    });
+    return { encryptedBytes, backupKey };
+  }
   return (
     <ProjectContext.Provider
       value={{

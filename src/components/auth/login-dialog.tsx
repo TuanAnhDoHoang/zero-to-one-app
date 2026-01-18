@@ -19,7 +19,7 @@ interface LoginDialogProps {
 }
 
 export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
-  const { login } = useAuth();
+  const { login, register } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = React.useState(false);
   const [username, setUsername] = React.useState('');
@@ -58,6 +58,37 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
     }
   };
 
+  const handleRegister = async () => {
+    if (!username || !password || !email) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Please fill in all fields',
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await register(username, email, password);
+      toast({
+        title: 'Success',
+        description: 'Registered successfully',
+      });
+      onOpenChange(false);
+      setUsername('');
+      setPassword('');
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Register failed',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange} >
       <DialogContent className="sm:max-w-[425px] text-slate-100">
@@ -66,7 +97,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
           <DialogTitle className="text-2xl">{registerMode ? 'Welcome sama to new word!!!' : 'Welcome Back!'}</DialogTitle>
           <DialogDescription>
             {registerMode ? 'Fill your informations and go with me...' : 'Sign in to continue your journey'}
-            
+
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -121,7 +152,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
           </div>
           {registerMode ?
             <Button
-              onClick={handleLogin}
+              onClick={handleRegister}
               disabled={isLoading}
               className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white"
             >

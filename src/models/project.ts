@@ -14,4 +14,6 @@ export type Project = {
     }[];
     createdAt?: string,
     updatedAt?: string;
+    quiltId?: string;
+    sealId?: string;
 };
