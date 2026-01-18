@@ -34,6 +34,7 @@ import {
     Check,
     Upload,
     Github,
+    Toolbox,
 } from 'lucide-react';
 
 // State management – Jotai atoms and hooks
@@ -396,20 +397,20 @@ const Editor = ({ p }: projectEditorProps) => {
                             <div className="p-4 space-y-6">
                                 <Card>
                                     <CardHeader>
-                                        <CardTitle className="flex items-center text-lg"><Sparkles className="mr-2 text-primary" /> AI Tools</CardTitle>
+                                        <CardTitle className="flex items-center text-lg"><Toolbox className="mr-2 text-primary" /> Tools</CardTitle>
                                     </CardHeader>
                                     <CardContent className="space-y-2">
-                                        <Button onClick={handleGenerateQuestions} disabled={isQuestionsLoading} className="w-full justify-start hover:cursor-pointer">
+                                        {/* <Button onClick={handleGenerateQuestions} disabled={isQuestionsLoading} className="w-full justify-start hover:cursor-pointer">
                                             <Sparkles className="mr-2" />
                                             {isQuestionsLoading ? 'Thinking...' : 'Guided Idea Maturation'}
-                                        </Button>
+                                        </Button> */}
                                         <div className="space-y-2">
-                                            <Button
+                                            {/* <Button
                                                 // onClick={handleGenerateCode} 
                                                 disabled={isCodeLoading} className="w-full justify-start hover:cursor-pointer ">
                                                 <Code className="mr-2" />
                                                 {isCodeLoading ? 'Generating...' : 'Generate Prototype'}
-                                            </Button>
+                                            </Button> */}
                                             {project.prototypeCode && (
                                                 <Button onClick={handleOpenPreview} variant="outline" className="w-full justify-start hover:cursor-pointer">
                                                     <Eye className="mr-2" />
