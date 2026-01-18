@@ -526,12 +526,12 @@ const Shop: React.FC = () => {
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, amount: 0.1 }}
-            className="grid grid-cols-1 gap-6"
+            className="grid grid-cols-1 gap-6 md:grid-cols-2 "
           >
             {tasks.length > 0 ? (
               tasks.map((task) => (
-                <motion.div key={task.id} variants={item} className="grid grid-cols-2 gap-6">
-                  <TaskCard {...task} />
+                <motion.div key={task.id} variants={item} className="">
+                  <TaskCard userProfileId={userProfile?.id || ''} task={task} />
                 </motion.div>
               ))
             ) : (

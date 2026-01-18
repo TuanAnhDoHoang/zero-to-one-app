@@ -1,15 +1,18 @@
 import React, { useEffect, useState, useRef } from "react";
 import { motion } from "framer-motion";
 import './shop_style.css';
-import { useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
+import { useCurrentAccount, useSignAndExecuteTransaction, useSignPersonalMessage } from "@mysten/dapp-kit";
 import { toast } from "@/hooks/use-toast";
 import SubmitProposalModal from "./SubmitProposalModal";
 import ProposalsListModal from "./ProposalsListModal";
-import { cancelTask, submitWork, TaskPakageId } from "@/blockchain/taskHandler";
+import { cancelTask, completeTask, startTask, submitWork, TaskModule } from "@/blockchain/taskHandler";
 import { randomBytes } from "crypto";
 import { fromHex, toHex } from "@mysten/sui/utils";
 import { getFullnodeUrl, SuiClient } from "@mysten/sui/client";
-import { SealClient } from "@mysten/seal";
+import { SealClient, SessionKey } from "@mysten/seal";
+import { Transaction } from "@mysten/sui/transactions";
+import console from "console";
+import { Check } from "lucide-react";
 
 export const STATUS_OPEN: number = 0;
 export const STATUS_ASSIGNED: number = 1;
@@ -150,9 +153,12 @@ export interface Task {
 // ];
 
 // TaskCard Component - Upwork style with game aesthetics
-interface TaskCardProps extends Task { }
+interface TaskCardProps {
+    userProfileId: string;
+    task: Task;
+}
 
-const TaskCard: React.FC<TaskCardProps> = (task) => {
+const TaskCard: React.FC<TaskCardProps> = ({ userProfileId, task }) => {
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [showProposalModal, setShowProposalModal] = useState(false);
     const [showProposalsModal, setShowProposalsModal] = useState(false);
@@ -161,6 +167,10 @@ const TaskCard: React.FC<TaskCardProps> = (task) => {
     const currAccount = useCurrentAccount();
     const [file, setFile] = useState<File | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [taskSubmits, setTaskSubmits] = useState<{ id: string, quiltId: string, sealId: Uint8Array }[]>([]);
+    const [showSubmissionsModal, setShowSubmissionsModal] = useState(false);
+
+    const { mutate: signPersonalMessage } = useSignPersonalMessage();
     //seal
     const serverObjectIds = ["0x73d05d62c18d9374e3ea529e8e0ed6161da1a141a94d3f76ae3fe4e99356db75", "0xf5d14a81a982144ae441cd7d64b09027f116a468bd36e7eca494f750591623c8"];
     const suiClient = new SuiClient({ url: getFullnodeUrl('testnet') });
@@ -223,36 +233,17 @@ const TaskCard: React.FC<TaskCardProps> = (task) => {
             !task.assigned_freelancer
         )
     }, [task]);
+
+
     const encryptFile = async (file: File, sealId: Uint8Array) => {
         const fileBytes = new Uint8Array(await file.arrayBuffer());
         const { encryptedObject: encryptedBytes, key: backupKey } = await client.encrypt({
             threshold: 1,
-            packageId: toHex(fromHex(TaskPakageId)),
+            packageId: toHex(fromHex(import.meta.env.VITE_PID)),
             id: toHex(sealId),
             data: fileBytes
         });
         return { encryptedBytes, backupKey };
-    }
-    const deployWalrus = async (encryptedBytes: Uint8Array | ArrayBuffer, address: string) => {
-        try {
-            // Use the proxy path defined in vite.config.ts to avoid CORS issues
-            const walPublisher = import.meta.env.VITE_WALRUS_PUBLISHER;
-            // const walPublisher = '/api/wal/rus';
-            const formData = new FormData();
-            // Ensure we provide a plain ArrayBuffer to Blob; copy if the input is a Uint8Array (avoids SharedArrayBuffer issues)
-            const arrayBuffer = encryptedBytes instanceof Uint8Array ? new Uint8Array(encryptedBytes).buffer : encryptedBytes;
-            formData.append('encrypted-data', new Blob([arrayBuffer], { type: 'application/octet-stream' }), 'encrypted-data.bin');
-
-            const response = await fetch(`${walPublisher}/v1/quilts?epochs=5&send_object_to=${address}`, {
-                method: 'PUT',
-                body: formData,
-            })
-            const data = await response.json();
-            const quiltId = data.storedQuiltBlobs[0].quiltPatchId;
-            return quiltId;
-        } catch (error) {
-            console.error('Error occurred while deploying walrus:', error);
-        }
     }
     const handleSubmitWork = async () => {
         if (!currAccount) {
@@ -274,7 +265,16 @@ const TaskCard: React.FC<TaskCardProps> = (task) => {
 
         const sealId = randomBytes(32);
         const { encryptedBytes } = await encryptFile(file, sealId);
-        const quiltId = await deployWalrus(encryptedBytes, task.client);
+        const uploadResponse = await fetch(`${import.meta.env.VITE_ENDPOINT}/projects/upload-file`, {
+            method: 'POST',
+            body: JSON.stringify({ encryptedBytes: encryptedBytes, address: task.client }),
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        const uploadData = await uploadResponse.json();
+        console.log('upload response: ', uploadData);
+        const quiltId = uploadData.response;
 
         if (!quiltId) {
             toast({
@@ -301,6 +301,194 @@ const TaskCard: React.FC<TaskCardProps> = (task) => {
                 toast({
                     title: "Error",
                     description: "Failed to submit work",
+                    variant: "destructive",
+                });
+            }
+        });
+    }
+    const handleStartTask = () => {
+        const tx = startTask(task.id);
+        signAndExecuteTransaction({
+            transaction: tx
+        }, {
+            onSuccess: () => {
+                toast({
+                    title: "Success",
+                    description: "Task started successfully",
+                    variant: "default",
+                });
+                setShowDetailsModal(false);
+            },
+            onError: () => {
+                toast({
+                    title: "Error",
+                    description: "Failed to start task",
+                    variant: "destructive",
+                });
+            }
+        });
+    }
+    useEffect(() => {
+        const fetchTaskSubmit = async () => {
+            if (!currAccount) {
+                toast({
+                    title: "Error",
+                    description: "Please connect your wallet",
+                    variant: "destructive",
+                });
+                return;
+            }
+            if (showDetailsModal) {
+                const taskSubmit = await suiClient.getOwnedObjects({
+                    owner: currAccount.address,
+                    filter: {
+                        StructType: `${import.meta.env.VITE_PID}::${TaskModule}::TaskSubmit`
+                    },
+                    options: {
+                        showContent: true
+                    }
+                });
+                const response = taskSubmit.data.filter(t => {
+                    if ((t.data?.content as any)?.fields.task_id as string === task.id) {
+                        return true;
+                    }
+                    return false;
+                });
+                const taskSubmits = response.map((t) => ({
+                    id: t.data?.objectId,
+                    quiltId: (t.data?.content as any)?.fields?.quilt_id,
+                    sealId: new Uint8Array((t.data?.content as any)?.fields?.seal_id || []),
+                })).filter((t): t is { id: string; quiltId: string; sealId: Uint8Array } => t.id !== undefined && t.quiltId !== undefined && t.sealId !== undefined);
+                console.log('taskSubmits: ', taskSubmits);
+                if (taskSubmits.length > 0 && taskSubmits[0].id !== task.id) {
+                    setTaskSubmits(taskSubmits);
+                }
+            }
+        }
+        fetchTaskSubmit();
+    }, [task, currAccount, showDetailsModal]);
+    const getSessionKey = async () => {
+        if (!currAccount) {
+            console.error('No current account found');
+            return;
+        }
+        const pid = import.meta.env.VITE_PID;
+        const sessionKey = await SessionKey.create({
+            address: currAccount.address,
+            packageId: pid,
+            ttlMin: 30, // TTL of 30 minutes
+            suiClient: suiClient,
+        });
+        const message = sessionKey.getPersonalMessage();
+
+        await new Promise<void>((resolve, reject) => {
+            signPersonalMessage({ message: message }, {
+                onSuccess: async (result) => {
+                    await sessionKey.setPersonalMessageSignature(result.signature);
+                    resolve();
+                },
+                onError: (error) => {
+                    console.error('Failed to sign personal message:', error);
+                    reject(error);
+                },
+            });
+        });
+        return sessionKey;
+    }
+    const handleDownload = async (submitTask: { id: string, quiltId: string, sealId: Uint8Array }) => {
+        try {
+            if (!currAccount) {
+                toast({
+                    title: "Error",
+                    description: "Please connect your wallet",
+                    variant: "destructive",
+                });
+                return;
+            }
+            const response = await fetch(`${import.meta.env.VITE_ENDPOINT}/projects/download/${submitTask.quiltId}`);
+            if (!response.ok) throw new Error('Download failed from backend');
+
+            const arrayBuffer = await response.arrayBuffer();
+            const tx = new Transaction();
+            tx.setGasBudget(1_000_000_000);
+            tx.setSender(currAccount.address);
+            tx.moveCall({
+                target: `${import.meta.env.VITE_PID}::seal_policy_task::seal_approve`,
+                arguments: [
+                    tx.pure.vector('u8', submitTask.sealId),
+                    tx.object(submitTask.id)
+                ]
+            })
+            const txBytes = await tx.build({ client: suiClient, onlyTransactionKind: true });
+            const data = new Uint8Array(arrayBuffer);
+            const sessionKey = await getSessionKey();
+            if (!sessionKey) {
+                toast({
+                    title: "Error",
+                    description: "Failed to get session key",
+                    variant: "destructive",
+                });
+                return;
+            }
+            const decrypted = await client.decrypt({
+                data: data,
+                sessionKey,
+                txBytes
+            });
+            console.log('decrypted: ', decrypted);
+
+            const blob = new Blob([decrypted as any]);
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `submission-${submitTask.quiltId.substring(0, 6)}.bin`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            toast({
+                title: "Success",
+                description: "File downloaded successfully",
+            });
+        } catch (error) {
+            console.error(error);
+            toast({
+                title: "Error",
+                description: "Failed to download file",
+                variant: "destructive",
+            });
+        }
+    }
+    const handleCheckTaskCompleted = (taskSubmitId: string) => {
+        if (!userProfileId) {
+            toast({
+                title: "Error",
+                description: "Please login to check task completed",
+                variant: "destructive",
+            });
+            return;
+        }
+        const tx = completeTask(
+            task.id,
+            userProfileId,
+            taskSubmitId
+        )
+        signAndExecuteTransaction({
+            transaction: tx,
+        }, {
+            onSuccess: () => {
+                toast({
+                    title: "Success",
+                    description: "Task completed successfully",
+                });
+                setShowSubmissionsModal(false);
+            },
+            onError: (error) => {
+                console.error(error);
+                toast({
+                    title: "Error",
+                    description: "Failed to complete task",
                     variant: "destructive",
                 });
             }
@@ -523,60 +711,82 @@ const TaskCard: React.FC<TaskCardProps> = (task) => {
                                     SAVE JOB
                                 </button>
                                 {
-                                    applyCondition && (
-                                        !task.proposals.find((proposal) => proposal.fields.freelancer === currAccount?.address) ?
-                                            (
-                                                <button
-                                                    onClick={handleApply}
-                                                    className="flex-1 rounded-lg bg-green-500 px-6 py-3 font-bold text-black transition-all hover:bg-green-600">
-                                                    APPLY NOW
-                                                </button>
-                                            ) :
-                                            (
-                                                <>
-                                                    <input
-                                                        type="file"
-                                                        ref={fileInputRef}
-                                                        className="hidden"
-                                                        onChange={(e) => {
-                                                            if (e.target.files && e.target.files.length > 0) {
-                                                                setFile(e.target.files[0]);
-                                                            }
-                                                        }}
-                                                    />
-                                                    {!file ? (
-                                                        <button
-                                                            onClick={() => fileInputRef.current?.click()}
-                                                            className="flex-1 rounded-lg bg-blue-500 px-6 py-3 font-bold text-white transition-all hover:bg-blue-600">
-                                                            UPLOAD WORK
-                                                        </button>
-                                                    ) : (
-                                                        <div className="flex flex-1 gap-2">
-                                                            <button
-                                                                onClick={handleSubmitWork}
-                                                                className="flex-1 rounded-lg bg-green-500 px-6 py-3 font-bold text-black transition-all hover:bg-green-600">
-                                                                SUBMIT {file.name.substring(0, 10)}...
-                                                            </button>
-                                                            <button
-                                                                onClick={() => setFile(null)}
-                                                                className="px-4 rounded-lg bg-red-500 text-white font-bold hover:bg-red-600"
-                                                            >
-                                                                ✕
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </>
-                                            )
+                                    applyCondition &&
+                                    (
+                                        <button
+                                            onClick={handleApply}
+                                            className="flex-1 rounded-lg bg-green-500 px-6 py-3 font-bold text-black transition-all hover:bg-green-600">
+                                            APPLY NOW
+                                        </button>
                                     )
                                 }
+                                {task.assigned_freelancer === currAccount?.address && (
+                                    <>
+                                        {task.status === STATUS_ASSIGNED && (
+                                            // ← add your content for status = 1 here
+                                            // e.g. <div>Waiting for freelancer to start...</div>
+                                            <div
+                                                onClick={handleStartTask}
+                                                className="flex-1 rounded-lg bg-yellow-500 px-6 py-3 font-bold text-black transition-all hover:bg-green-600 text-center">Start</div>
+                                        )}
+
+                                        {task.status === STATUS_IN_PROGRESS && (
+                                            <>
+                                                <input
+                                                    type="file"
+                                                    ref={fileInputRef}
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        if (e.target.files?.[0]) {
+                                                            setFile(e.target.files[0]);
+                                                        }
+                                                    }}
+                                                />
+
+                                                {!file ? (
+                                                    <button
+                                                        onClick={() => fileInputRef.current?.click()}
+                                                        className="flex-1 rounded-lg bg-blue-500 px-6 py-3 font-bold text-white transition-all hover:bg-blue-600"
+                                                    >
+                                                        UPLOAD WORK
+                                                    </button>
+                                                ) : (
+                                                    <div className="flex flex-1 gap-2">
+                                                        <button
+                                                            onClick={handleSubmitWork}
+                                                            className="flex-1 rounded-lg bg-green-500 px-6 py-3 font-bold text-black transition-all hover:bg-green-600"
+                                                        >
+                                                            SUBMIT {file.name.substring(0, 10)}...
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setFile(null)}
+                                                            className="px-4 rounded-lg bg-red-500 font-bold text-white hover:bg-red-600"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                    </>
+                                )}
                                 {
                                     task.client === currAccount?.address && (
-                                        <button
-                                            disabled={task.status !== 0}
-                                            onClick={handleCancel}
-                                            className="flex-1 rounded-lg bg-red-500 px-6 py-3 font-bold text-black transition-all hover:bg-green-600">
-                                            CANCEL
-                                        </button>
+                                        <div className="flex gap-2">
+                                            {taskSubmits.length > 0 && (
+                                                <button
+                                                    onClick={() => setShowSubmissionsModal(true)}
+                                                    className="flex-1 rounded-lg bg-blue-500 px-6 py-3 font-bold text-white transition-all hover:bg-blue-600">
+                                                    VIEW SUBMISSIONS
+                                                </button>
+                                            )}
+                                            <button
+                                                disabled={task.status !== 0}
+                                                onClick={handleCancel}
+                                                className="flex-1 rounded-lg bg-red-500 px-6 py-3 font-bold text-black transition-all hover:bg-green-600">
+                                                CANCEL
+                                            </button>
+                                        </div>
                                     )
                                 }
 
@@ -601,8 +811,73 @@ const TaskCard: React.FC<TaskCardProps> = (task) => {
                     onClose={() => setShowProposalsModal(false)}
                 />
             )}
+            {
+                showSubmissionsModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+                        onClick={() => setShowSubmissionsModal(false)}
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full max-w-md rounded-2xl border-2 border-blue-400 bg-gray-900 shadow-2xl overflow-hidden"
+                        >
+                            <div className="bg-gray-800 p-4 border-b border-gray-700 flex justify-between items-center">
+                                <h3 className="text-xl font-bold text-blue-400">Submissions</h3>
+                                <button
+                                    onClick={() => setShowSubmissionsModal(false)}
+                                    className="text-gray-400 hover:text-white"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                            <div className="p-4 space-y-3">
+                                {taskSubmits.map((submit, idx) => (
+                                    <div key={idx} className="flex flex-col gap-4 items-center justify-between p-3 rounded-lg bg-gray-800 border border-gray-700">
+                                        <div className="overflow-hidden">
+                                            <p className="text-sm font-bold text-gray-300 truncate w-80">
+                                                Quilt ID: {submit.quiltId}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => handleDownload(submit)}
+                                                className="p-2 rounded-full bg-blue-500 text-white hover:bg-blue-600 transition-colors flex-shrink-0"
+                                                title="Download"
+                                            >
+                                                ⬇️
+                                            </button>
+                                            {task.status === STATUS_SUBMITTED && (
+                                                <button onClick={() => handleCheckTaskCompleted(submit.id)}
+                                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-green-500 text-white hover:bg-green-600 transition-colors text-xs font-bold whitespace-nowrap"
+                                                >
+                                                    <Check className="w-4 h-4" /> Check task completed
+                                                </button>
+                                            )}
+                                            {task.status === STATUS_COMPLETED && (
+                                                <button
+                                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-500 text-white hover:bg-gray-600 transition-colors text-xs font-bold whitespace-nowrap"
+                                                >
+                                                    Completed
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                                {taskSubmits.length === 0 && (
+                                    <p className="text-center text-gray-500 py-4">No submissions yet.</p>
+                                )}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )
+            }
         </>
     );
 };
-
 export default TaskCard;

@@ -69,9 +69,9 @@ export interface PlatformCap {
     id: string;
 }
 
-const PLATFORM_ID = "0x754539dfb7d17ebca4da4e66e3c88ece2e01611cf3b7507fa81ce1fbebe1450c";
+const PLATFORM_ID = "0x0b09abfe4b6d38ae4eb2f4a8972f6f2e6ff78b20b6bc6126871c51e0f9fb9a1a";
 //test package Id
-const PACKAGE_ID = "0x9e30d8757c19a68ada3c8d0d750f6ba277a51d161759fa0452a79dd0038dc62b"
+const PACKAGE_ID = "0xb445d007f13a1e23049f782826419583c5416fb37ae1b8d8c583bd72fe2c3c60"
 const MODULE_TASK = 'task';
 const UserProfile_TYPE = 'UserProfile'
 
@@ -260,6 +260,7 @@ function startTask(
 // )
 function submitWork(taskId: string, quilt_id: string, seal_id: Uint8Array) {
     const tx = new Transaction();
+    tx.setGasBudget(1_000_000_000)
     tx.moveCall({
         target: `${PACKAGE_ID}::${MODULE_TASK}::submit_work`,
         arguments: [
@@ -277,12 +278,13 @@ function submitWork(taskId: string, quilt_id: string, seal_id: Uint8Array) {
 //     clock: &Clock,
 //     ctx: &mut TxContext,
 // )
-function completeTask(taskId: string, userProfileId: string) {
+function completeTask(taskId: string, userProfileId: string, taskSubmitId: string) {
     const tx = new Transaction();
     tx.moveCall({
         target: `${PACKAGE_ID}::${MODULE_TASK}::complete_task`,
         arguments: [
             tx.object(taskId),
+            tx.object(taskSubmitId),
             tx.object(PLATFORM_ID),
             tx.object(userProfileId),
             tx.object.clock(),
